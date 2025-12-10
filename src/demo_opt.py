@@ -7,6 +7,7 @@ from pycountry_convert import (
     country_alpha2_to_continent_code,
 )
 
+
 def evaluate(df):
     if hasattr(df, "_evaluate"):
         df._evaluate()
@@ -18,7 +19,7 @@ def load_data():
 
 def prep_data():
     df = load_data()
-    # simply inflated the loaded data since it only contains 0.5M of samples 
+    # simply inflated the loaded data since it only contains 0.5M of samples
     df = pd.concat([df] * int(os.environ.get("SF", 5)))
     return df
 
@@ -30,6 +31,7 @@ def to_region(country):
         return cont
     except:
         return None
+
 
 mapper = {
     "United Kingdom": "EU",
@@ -86,7 +88,7 @@ def func_1(df):
 
     # transform: fillna(mode)
     tmp = df.merge(most_freq, on="StockCode", how="left")
-    #df["Description"] = df["Description"].fillna(tmp["freq_Description"])
+    # df["Description"] = df["Description"].fillna(tmp["freq_Description"])
     df["Description"] = df["Description"].mask(
         df["Description"].isnull(), tmp["freq_Description"]
     )
@@ -98,8 +100,12 @@ def func_1(df):
 def func_2(df, days_offset=5):
     delta = timedelta(days=days_offset)
     # df = df.groupby(["CustomerID", "InvoiceNo"], as_index=False)["InvoiceDate"].first()
-    df = load_data().groupby(["CustomerID", "InvoiceNo"], as_index=False)["InvoiceDate"].first()
-    df = pd.concat([df] * int(os.environ.get("SF", 5))) 
+    df = (
+        load_data()
+        .groupby(["CustomerID", "InvoiceNo"], as_index=False)["InvoiceDate"]
+        .first()
+    )
+    df = pd.concat([df] * int(os.environ.get("SF", 5)))
     ret = (
         df.merge(df, on="CustomerID")
         .pipe(lambda m: m[abs(m["InvoiceDate_x"] - m["InvoiceDate_y"]) <= delta])
@@ -173,4 +179,3 @@ for fn in [func_1, func_2, func_3, func_4, func_5]:
             fn(df)
         except Exception as e:
             print(f"Failed with {e}")
-

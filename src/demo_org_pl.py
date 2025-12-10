@@ -14,9 +14,9 @@ def load_data():
 
 def prep_data():
     df = load_data()
-    # simply inflated the loaded data since it only contains 0.5M of samples 
+    # simply inflated the loaded data since it only contains 0.5M of samples
     df = pl.concat([df] * int(os.environ.get("SF", 5)))
-    return df
+    return df.collect().lazy()
 
 
 def to_region(country):
@@ -89,7 +89,11 @@ def func_1(df):
 
 def func_2(df, days_offset=5):
     delta = timedelta(days=days_offset)
-    df = load_data().group_by(["CustomerID", "InvoiceNo"]).agg(pl.col("InvoiceDate").first())
+    df = (
+        load_data()
+        .group_by(["CustomerID", "InvoiceNo"])
+        .agg(pl.col("InvoiceDate").first())
+    )
 
     def apply_window(group_df: pl.DataFrame) -> pl.DataFrame:
         # group_df contains ONE CustomerID
@@ -106,26 +110,37 @@ def func_2(df, days_offset=5):
 
     return (
         df.collect()
-          .group_by("CustomerID")
-          .map_groups(apply_window) # apply to each customer group
-          .select(["CustomerID", "InvoiceNo", "count"])
-          .sort("count")
+        .group_by("CustomerID")
+        .map_groups(apply_window)  # apply to each customer group
+        .select(["CustomerID", "InvoiceNo", "count"])
+        .sort("count")
     )
 
 
 def func_3(df):
-    ret = df.group_by(["CustomerID", "InvoiceNo"]).agg(
-            (pl.col("Quantity") * pl.col("UnitPrice")).sum().alias("revenue")
-    ).sort("revenue", descending=True)
+    ret = (
+        df.group_by(["CustomerID", "InvoiceNo"])
+        .agg((pl.col("Quantity") * pl.col("UnitPrice")).sum().alias("revenue"))
+        .sort("revenue", descending=True)
+    )
     return ret.collect()
 
 
 def func_4(df):
-    #left = df.with_columns(pl.col("Country").map_elements(to_region, return_dtype=pl.String).alias("region"))
+    # left = df.with_columns(
+    #    pl.col("Country")
+    #    .map_elements(to_region, return_dtype=pl.String)
+    #    .alias("region")
+    # )
+    # right = df.rename(
+    #    {c: f"{c}_y" if c not in ["CustomerID", "StockCode"] else c for c in df.columns}
+    # )
     left = df.with_columns(pl.col("Country").replace(mapper).alias("region"))
     right = df.rename(
-        #{c: f"{c}_y" if c not in ["CustomerID", "StockCode"] else c for c in df.columns}
-        {c: f"{c}_y" if c not in ["CustomerID", "StockCode"] else c for c in df.collect_schema().names()}
+        {
+            c: f"{c}_y" if c not in ["CustomerID", "StockCode"] else c
+            for c in df.collect_schema().names()
+        }
     )
 
     ret = (
@@ -160,5 +175,3 @@ for fn in [func_1, func_2, func_3, func_4, func_5]:
             fn(df)
         except Exception as e:
             print(f"Failed with {e}")
-
-
